@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MS-CPU · Simulador de Planificación de Procesos</title>
+<style>
+  :root {
+    --bg: #0f172a; --panel: #1e293b; --panel2: #334155; --border: #475569;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8; --accent2: #818cf8;
+    --ok: #22c55e; --warn: #f59e0b; --err: #ef4444;
+    --b-nuevo: #64748b; --b-listo: #3b82f6; --b-ejecutando: #10b981;
+    --b-bloqueado: #f59e0b; --b-terminado: #a855f7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh;
+  }
+  header {
+    background: linear-gradient(135deg, #1e293b, #0f172a); border-bottom: 1px solid var(--border);
+    padding: 22px 30px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 20px; font-weight: 800; }
+  header h1 span { color: var(--accent); }
+  header .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--err); }
+  .dot.on { background: var(--ok); }
+  main { max-width: 1240px; margin: 0 auto; padding: 26px 24px 60px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+  .panel h2 { font-size: 15px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  form.form-proceso { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  .field label b { color: var(--err); }
+  .field input, .field select {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 11px; border-radius: 8px; font-size: 13px; outline: none;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field.full { grid-column: 1 / -1; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    background: var(--accent); color: #062033; border: none; cursor: pointer; font-weight: 700;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; transition: filter .15s;
+  }
+  button:hover { filter: brightness(1.12); }
+  button.secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+  button.danger { background: var(--err); color: #fff; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .3px; }
+  td.badge { font-weight: 700; }
+  .empty { color: var(--muted); text-align: center; padding: 18px 0; font-size: 13px; }
+  .hidden { display: none; }
+  .gantt-wrap { overflow-x: auto; }
+  .gantt { position: relative; min-width: 560px; }
+  .gantt-row { position: relative; height: 36px; display: flex; align-items: center; }
+  .gantt-row > .label-izq {
+    position: absolute; left: 0; width: 100px; text-align: right; padding-right: 10px;
+    font-size: 12px; color: var(--muted); z-index: 3;
+  }
+  .gantt-row .area { position: absolute; left: 100px; right: 0; height: 34px; border-bottom: 1px dashed var(--border); }
+  .gantt-tick { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--border); }
+  .block {
+    position: absolute; top: 3px; bottom: 3px; border-radius: 6px; display: flex; align-items: center;
+    justify-content: center; font-size: 10px; font-weight: 700; color: #062033; z-index: 2; overflow: hidden厂
+  }
+  .block.io {
+    background: repeating-linear-gradient(45deg, #f59e0b 0 6px, #92400e 6px 12px);
+    color: #fff;
+  }
+  .metrics-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+  .m-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .m-card .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; }
+  .m-card .val { font-size: 24px; font-weight: 800; color: var(--accent); margin-top: 4px; }
+  .hint { font-size: 11px; color: var(--muted); }
+  .badge2 { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+  .b-nuevo { background: var(--b-nuevo); color: #fff; }
+  .b-listo { background: var(--b-listo); color: #fff; }
+  .b-ejecutando { background: var(--b-ejecutando); color: #062033; }
+  .b-bloqueado { background: var(--b-bloqueado); color: #062033; }
+  .b-terminado { background: var(--b-terminado); color: #fff; }
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; background: var(--ok); color: #062033;
+    padding: 12px 18px; border-radius: 10px; font-size: 13px; font-weight: 700; z-index: 60;
+    opacity: 0; transform: translateY(12px); transition: all .25s;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.err { background: var(--err); color: #fff; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>MS-CPU <span>&#124; Simulador de Planificación de Procesos</span></h1>
+    <div class="sub">FCFS · SJF · SRTF · Round Robin · Prioridad</div>
+  </div>
+  <div class="row">
+    <label style="font-size:12px;color:var(--muted)">API</label>
+    <input id="apiUrl" value="http://localhost:3000" style="background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 10px;font-size:12px;width:220px;outline:none">
+    <button class="secondary" onclick="reconectar()">Conectar</button>
+    <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Sin conectar</span></div>
+  </div>
+</header>
+
+<main>
+  <div class="grid">
+    <section style="display:grid;gap:22px">
+      <div class="panel">
+        <h2>&#10133; Crear proceso</h2>
+        <form class="form-proceso" id="formProceso">
+          <div class="field full">
+            <label>Nombre</label>
+            <input id="fNombre" required placeholder="Ej: Proceso A">
+          </div>
+          <div class="field">
+            <label>Ráfaga CPU (burst) <b>*</b></label>
+            <input id="fBurst" type="number" min="1" value="6">
+          </div>
+          <div class="field">
+            <label>Tiempo de llegada</label>
+            <input id="fArrival" type="number" min="0" value="0">
+          </div>
+          <div class="field">
+            <label>Prioridad (1 = mayor)</label>
+            <input id="fPrioridad" type="number" min="1" value="1">
+          </div>
+          <div class="field">
+            <label>Tiempo E/S (0 = sin bloqueo)</label>
+            <input id="fIo" type="number" min="0" value="0">
+          </div>
+          <div class="field full"><button id="btnCrear">Crear proceso</button></div>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>&#128421; Procesos <span id="conteo" style="color:var(--accent)">0</span></h2>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>ID</th><th>Nombre</th><th>Burst</th><th>Llegada</th><th>Priori.</th><th>E/S</th><th>Estado</th><th></th></tr></thead>
+            <tbody id="tablaProcesos"></tbody>
+          </table>
+          <div id="sinProcesos" class="empty">No hay procesos registrados. Crea uno arriba.</div>
+        </div>
+        <div class="row" style="margin-top:12px;justify-content:flex-end">
+          <button class="danger" id="btnLimpiar" onclick="eliminarTodos()">Eliminar todos</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="panel">
+        <h2>&#9881; Simulación</h2>
+        <div class="row">
+          <div class="field" style="flex:1">
+            <label>Algoritmo</label>
+            <select id="selAlgoritmo">
+              <option value="fcfs">FCFS - Primero en llegar</option>
+              <option value="sjf">SJF - Ráfaga más corta</option>
+              <option value="srtf">SRTF - Rápaga restante más corta (apropiativo)</option>
+              <option value="rr">Round Robin</option>
+              <option value="prioridad">Prioridad (menor = mayor)</option>
+            </select>
+          </div>
+          <div class="field" id="campoQuantum" style="display:none;width:120px">
+            <label>Quantum (RR)</label>
+            <input id="fQuantum" type="number" min="1" value="3">
+          </div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button onclick="simular()">&#9654; Ejecutar simulación</button>
+          <button class="secondary" onclick="simularPasoApaso()">Paso a paso</button>
+          <span id="loading" class="hint"><span class="spinner"></span>Simulando...</span>
+        </div>
+        <p class="hint">La simulación usa los procesos guardados en la base de datos.</p>
+      </div>
+
+      <div class="panel">
+        <h2>&#128202; Diagrama de Gantt <span id="algoActual" class="hint">—</span></h2>
+        <div id="ganttBox" class="gantt-wrap">
+          <div class="empty">Ejecuta una simulación para ver el diagrama de Gantt.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="grid" style="margin-top:22px">
+    <div class="panel">
+      <h2>&#128202; Estados instantáneos</h2>
+      <div id="estadosBox"><div class="empty">Avanza paso a paso para ver los estados.</div></div>
+    </div>
+    <div class="panel">
+      <h2>&#128202; Resultados y métricas</h2>
+      <div class="metrics-cards">
+        <div class="m-card"><div class="lbl">Tiempo de espera promedio</div><div class="val" id="mEspera">—</div></div>
+        <div class="m-card"><div class="lbl">Tiempo de retorno promedio</div><div class="val" id="mRetorno">—</div></div>
+      </div>
+      <div style="margin-top:14px">
+        <table>
+          <thead><tr><th>Proceso</th><th>Llegada</th><th>Burst</th><th>E/S</th><th>Inicio</th><th>Final</th><th>Retorno</th><th>Espera</th></tr></thead>
+          <tbody id="tablaMetricas"></tbody>
+        </table>
+        <div id="sinMetricas" class="empty">Sin resultados todavía.</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  var API = 'http://localhost:3000';
+  var COLORES = ['#818cf8', '#38bdf8', '#34d399', '#f472b6', '#facc15', '#a78bfa', '#fb923c', '#4ade80', '#f87171', '#22d3ee'];
+  var ESTADO_CLASES = { b-nuevo: 'b-nuevo', b-listo: 'b-listo', b-ejecutando: 'b-ejecutando', b-bloqueado: 'b-bloqueado', b-terminando: 'b-terminado' };
+  var colorMap = {};
+  var toastTimer;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function toast(msg, tipo) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (tipo === 'err' ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.className = 'toast'; }, 2600);
+  }
+
+  function setEstado(on) {
+    $('statusDot').className = 'dot' + (on ? ' on' : '');
+    $('statusText').textContent = on ? 'Conectado' : 'Sin conectar';
+  }
+
+  function reconectar() {
+    API = ($('apiUrl').value || 'http://localhost:3000').replace(/\/$/, '');
+    cargarProcesos();
+  }
+
+  function api(path, opts) {
+    return fetch(API + path, opts).then(function (res) {
+      if (!res.ok) {
+        return res.json().then(function (j) {
+          var msg = (j && j.message) || 'Error ' + res.status;
+          if (Array.isArray(msg)) msg = msg.join(', ');
+          throw new Error(msg);
+        });
+      }
+      return res.json();
+    });
+  }
+
+  function badge(estado) {
+    var cls = ESTADO_CLASES[estado] || 'b-nuevo';
+    return '<span class="badge2 ' + cls + '">' + estado + '</span>';
+  }
+
+  function cargarProcesos() {
+    $('btnLimpiar').disabled = true;
+    api('/procesos')
+      .then(function (procesos) {
+        setEstado(true);
+        renderProcesos(procesos);
+        $('btnLimpiar').disabled = procesos.length === 0;
+        $('sinProcesos').style.display = procesos.length ? 'none' : 'block';
+      })
+      .catch(function (e) {
+        setEstado(false);
+        $('tablaProcesos').innerHTML = '';
+        $('sinProcesos').textContent = 'No se pudo conectar: ' + e.message;
+        $('sinProcesos').style.display = 'block';
+        $('conteo').textContent = '0';
+      });
+  }
+
+  function renderProcesos(procesos) {
+    $('conteo').textContent = procesos.length;
+    $('tablaProcesos').innerHTML = procesos
+      .map(function (p) {
+        return (
+          '<tr><td>' + p.id + '</td><td><b>' + p.nombre + '</b></td><td>' + p.burstTime + '</td><td>' + p.arrivalTime + '</td><td>' + p.prioridad + '</td><td>' + p.ioTime + '</td><td>' + badge(p.estado) + '</td><td><button class="danger" style="padding:4px 10px" onclick="eliminarProceso(' + p.id + ')">&#10005;</button></td></tr>'
+        );
+      })
+      .join('');
+  }
+
+  $('formProceso').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var body = {
+      nombre: $('fNombre').value,
+      burstTime: parseInt($('fBurst').value, 10),
+      arrivalTime: parseInt($('fArrival').value, 10) || 0,
+      prioridad: parseInt($('fPrioridad').value, 10) || 1,
+      ioTime: parseInt($('fIo').value, 10) || 0,
+    };
+    $('btnCrear').disabled = true;
+    api('/procesos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(function () {
+        toast('Proceso creado');
+        $('fNombre').value = '';
+        cargarProcesos();
+      })
+      .catch(function (e) { toast(e.message, 'err'); })
+      .finally(function () { $('btnCrear').disabled = false; });
+  });
+
+  function eliminarProceso(id) {
+    api('/procesos/' + id, { method: 'DELETE' })
+      .then(function () { toast('Proceso eliminado'); cargarProcesos(); })
+      .catch(function (e) { toast(e.message, 'err'); });
+  }
+
+  function eliminarTodos() {
+    api('/procesos', { method: 'DELETE' })
+      .then(function () { toast('Todos los procesos eliminados'); cargarProcesos(); })
+      .catch(function (e) { toast(e.message, 'err'); });
+  }
+
+  function buildUrl(base, params) {
+    var u = new URL(API + base);
+    Object.keys(params).forEach(function (k) {
+      if (params[k] !== undefined && params[k] !== null && params[k] !== '') u.searchParams.set(k, params[k]);
+    });
+    return u.toString();
+  }
+
+  function setCargando(on) {
+    $('loading').style.display = on ? 'inline' : 'none';
+    $('btnSimular').disabled = on;
+  }
+
+  function simular() {
+    var algoritmo = $('selAlgoritmo').value;
+    var quantum = algoritmo === 'rr' ? parseInt($('fQuantum').value, 10) : undefined;
+    setCargando(true);
+    api(buildUrl('/simular', { algoritmo: algoritmo, quantum: quantum }), { method: 'POST' })
+      .then(function (r) {
+        $('algoActual').textContent = r.algoritmo + (r.quantum ? ' (quantum=' + r.quantum + ')' : '');
+        asignarColores(r.gantt);
+        renderGanttParcial(r.gantt, null, r.gantt);
+        renderMetricas(r);
+        renderEstados(null, r.estados, 'Terminado');
+        toast('Simulación ' + r.algoritmo + ' completada');
+      })
+      .catch(function (e) { toast(e.message, 'err'); });
+    setCargando(false);
+  }
+
+  function maxTiempo(gantt) { return gantt.reduce(function (m, g) { return Math.max(m, g.fin); }, 0); }
+
+  function asignarColores(gantt) {
+    colorMap = {};
+    gantt.forEach(function (g) {
+      if (!(g.procesoId in colorMap)) colorMap[g.procesoId] = COLORES[Object.keys(colorMap).length % COLORES.length];
+    });
+  }
+
+  function filasGantt(gantt) {
+    var ids = [];
+    gantt.forEach(function (g) { if (ids.indexOf(g.procesoId) === -1) ids.push(g.procesoId); });
+    return ids.map(function (id) {
+      var g = gantt.find(function (x) { return x.procesoId === id; });
+      return { id: id, nombre: g ? g.procesoNombre : 'P' + id };
+    });
+  }
+
+  function ticksHasta(maxT) {
+    var arr = [];
+    for (var i = 0; i <= maxT; i++) arr.push(i);
+    return arr;
+  }
+
+  function renderGanttParcial(gantt, tiempoActual, ganttCompleto) {
+    ganttCompleto = ganttCompleto || gantt;
+    var box = $('ganttBox');
+    if (!ganttCompleto.length) { box.innerHTML = '<div class="empty">Sin bloques de CPU.</div>'; return; }
+    var maxT = Math.max(maxTiempo(ganttCompleto), 1);
+    var anchoArea = 900;
+    var escala = anchoArea / maxT;
+    var ticks = ticksHasta(maxT Temporary);
+    var filas = filasGantt(ganttCompleto);
+
+    var html = '<div class="gantt" style="width:' + (90 + anchoArea) + 'px">';
+    var grid = '<div class="gantt-grid" style="left:90px;right:0">' + ticks.map(function (t) { return t < maxT ? '<div class="gantt-tick" style="left:' + (t * escala) + 'px"></div>' : ''; }).join('') + '</div>';
+
+    filas.forEach(function (f) {
+      var bloques = gantt.filter(function (g) { return g.procesoId === f.id; });
+      var inner = '';
+      bloques.forEach(function (g) {
+        var left = g.inicio * escala;
+        var w = Math.max((g.fin - g.inicio) * escala, 9);
+        var bg = g.tipo === 'io' ? '' : 'background:' + (colorMap[g.procesoId] || '#818cf8');
+        inner += '<div class="block ' + (g.tipo === 'io' ? 'io' : '') + '" style="left:' + left + 'px;width:' + (w - 2) + 'px;' + bg + '" title="' + g.procesoNombre + ' [' + g.tipo + '] ' + g.inicio + '-' + g.fin + '">' + (w > 26 ? g.procesoNombre : '') + '</div>';
+      });
+      var gridlines = ticks.map(function (t) { return t < maxT ? '<div class="gantt-tick" style="left:' + (t * escala) + 'px"></div>' : ''; }).join('');
+      inner += '<div class="gantt-grid" style="left:90px;right:0">' + gridlines + '</div>';
+      html += '<div class="gantt-row"><div class="label-izq">' + f.nombre + '</div><div class="area">' + inner + '</div></div>';
+    });
+
+    html += '<div class="gantt-axis" style="margin-left:90px;height:22px;position:relative;width:' + anchoArea + 'px">';
+    html += ticks.map(function (t) { return '<span style="position:absolute;left:' + (t * escala) + 'px;transform:translateX(-50%);font-size:10px;color:var(--muted)">' + t + '</span>'; }).join('');
+    html += '</div>';
+
+    if (tiempoActual !== undefined && tiempoActual !== null) {
+      html += '<div class="gantt-tick" style="pointer-events:none;left:' + (90 + tiempoActual * escala) + 'px;border-left:2px solid var(--err);z-index:5;height:100%"></div>';
+    }
+    html += '</div>';
+    box.innerHTML = html;
+  }
+
+  function renderMetricas(r) {
+    $('mEspera').textContent = r.tiempoEsperaPromedio.toFixed(2);
+    $('mRetorno').textContent = r.tiempoRetornoPromedio.toFixed(2);
+    $('sinMetricas').style.display = 'none';
+    $('tablaMetricas').innerHTML = r.metricasPorProceso
+      .map(function (m) {
+        return '<tr><td><b>' + m.procesoNombre + '</b></td><td>' + m.tiempoLlegada + '</td><td>' + m.tiempoRafaga + '</td><td>' + m.tiempoIO + '</td><td>' + m.tiempoInicio + '</td><td>' + m.tiempoFinal + '</td><td>' + m.tiempoRetorno + '</td><td>' + m.tiempoEspera + '</td></tr>';
+      })
+      .join('');
+  }
+
+  function renderEstados(estado, todos, titulo) {
+    var box = $('estadosBox');
+    var estados = estado ? [estado] : todos;
+    if (!estados || !estados.length) { box.innerHTML = '<div class="empty">Sin datos de estados.</div>'; return; }
+    var html = '<div class="hint">' + titulo + '</div>';
+    estados.forEach(function (est) {
+      html += '<div style="margin:10px 0 4px;font-weight:700">t = ' + est.tiempo + '</div>';
+      est.procesos.forEach(function (p) {
+        var nombre = 'P' + p.id + (p.burstRestante !== undefined && p.burstRestante !== null ? ' (restante ' + p.burstRestante + ')' : '');
+        html += '<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:120px;font-size:12px">' + nombre + '</span>' + badge(p.estado) + '</div>';
+      });
+    });
+    box.innerHTML = html;
+  }
+
+  function simularPasoApaso() {
+    var algoritmo = $('selAlgoritmo').value;
+    var quantum = algoritmo === 'rr' ? parseInt($('fQuantum').value, 10) : undefined;
+    setCargando(true);
+    api(buildUrl('/simular', { algoritmo: algoritmo, quantum: quantum }), { method: 'POST' })
+      .then(function (r) {
+        $('algoActual').textContent = r.algoritmo + (r.quantum ? ' (quantum=' + r.quantum + ')' : '');
+        asignarColores(r.ganttCompleto || r.gantt);
+        var ganttCompleto = r.ganttCompleto || r.gantt;
+        var pasos = 0;
+        function siguientes() {
+          if (pasos >= r.estados.length) {
+            renderMetricas(r);
+            toast('Simulación paso a paso finalizada');
+            setCargando(false);
+            return;
+          }
+          var est = r.estados[pasos];
+          var gParcial = (r.gantt || []).filter(function (g) { return g.fin <= est.tiempo; });
+          renderGanttParcial(gParcial, est.tiempo, ganttCompleto);
+          renderEstados(est, null, 'Paso ' + (pasos + 1) + '/' + r.estados.length + ' · t=' + est.tiempo);
+          pasos++;
+          setTimeout(siguientes, 600);
+        }
+        siguientes();
+      })
+      .catch(function (e) { toast(e.message, 'err'); setCargando(false); });
+  }
+
+  $('selAlgoritmo').addEventListener('change', function () {
+    $('campoQuantum').style.display = $('selAlgoritmo').value === 'rr' ? 'block' : 'none';
+  });
+
+  $('apiUrl').addEventListener('keydown', function (e) { if (e.key === 'Enter') reconectar(); });
+</script>
+</body>
+</html>

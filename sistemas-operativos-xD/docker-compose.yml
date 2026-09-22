@@ -1,0 +1,36 @@
+services:
+  app:
+    build: .
+    container_name: ms-cpu-container
+    ports:
+      - "3003:3000"
+    environment:
+      PORT: 3000
+      HOST: 0.0.0.0
+      NODE_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: gj28752317
+      DB_NAME: ms_cpu
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: ms-cpu-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: gj28752317
+      POSTGRES_DB: ms_cpu
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ms_cpu"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
