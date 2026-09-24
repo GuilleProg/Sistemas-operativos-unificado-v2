@@ -1,7 +1,59 @@
 services:
-  backend:
+
+  # ─── MÓDULO 03: CPU ───────────────────────────────────────────
+  cpu-db:
+    image: postgres:17-alpine
+    container_name: cpu-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: gj28752317
+      POSTGRES_DB: ms_cpu
+    ports:
+      - '5433:5432'
+    volumes:
+      - cpu_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - cpu-net
+
+  cpu-backend:
     build:
-      context: ./backend
+      context: ./sistemas-operativos-xD
+      dockerfile: Dockerfile
+    container_name: cpu-backend
+    ports:
+      - '3003:3003'
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+      - DB_HOST=cpu-db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=gj28752317
+      - DB_NAME=ms_cpu
+    depends_on:
+      - cpu-db
+    restart: unless-stopped
+    networks:
+      - cpu-net
+
+  cpu-frontend:
+    image: nginx:alpine
+    container_name: cpu-frontend
+    ports:
+      - '8081:80'
+    volumes:
+      - ./sistemas-operativos-xD/index.html:/usr/share/nginx/html/index.html:ro
+    depends_on:
+      - cpu-backend
+    restart: unless-stopped
+    networks:
+      - cpu-net
+
+  # ─── MÓDULO 04: INTERRUPCIONES ────────────────────────────────
+  interruptions-backend:
+    build:
+      context: "./backend S1"
       dockerfile: Dockerfile
     container_name: interruptions-backend
     ports:
@@ -9,13 +61,10 @@ services:
     environment:
       - NODE_ENV=production
     restart: unless-stopped
-    healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/simulation/state']
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    networks:
+      - interruptions-net
 
-  frontend:
+  interruptions-frontend:
     image: nginx:alpine
     container_name: interruptions-frontend
     ports:
@@ -23,5 +72,14 @@ services:
     volumes:
       - ./frontend:/usr/share/nginx/html:ro
     depends_on:
-      - backend
+      - interruptions-backend
     restart: unless-stopped
+    networks:
+      - interruptions-net
+
+volumes:
+  cpu_db_data:
+
+networks:
+  cpu-net:
+  interruptions-net:
