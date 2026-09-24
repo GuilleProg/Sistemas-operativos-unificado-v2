@@ -101,12 +101,7 @@
     <h1>MS-CPU <span>&#124; Simulador de Planificación de Procesos</span></h1>
     <div class="sub">FCFS · SJF · SRTF · Round Robin · Prioridad</div>
   </div>
-  <div class="row">
-    <label style="font-size:12px;color:var(--muted)">API</label>
-    <input id="apiUrl" value="http://localhost:3003" style="background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 10px;font-size:12px;width:220px;outline:none">
-    <button class="secondary" onclick="reconectar()">Conectar</button>
-    <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Sin conectar</span></div>
-  </div>
+  <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Conectando...</span></div>
 </header>
 
 <main>
@@ -324,11 +319,11 @@
   }
 
   function buildUrl(base, params) {
-    var u = new URL(API + base);
-    Object.keys(params).forEach(function (k) {
-      if (params[k] !== undefined && params[k] !== null && params[k] !== '') u.searchParams.set(k, params[k]);
-    });
-    return u.toString();
+    var query = Object.keys(params)
+      .filter(function (k) { return params[k] !== undefined && params[k] !== null && params[k] !== ''; })
+      .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); })
+      .join('&');
+    return base + (query ? '?' + query : '');
   }
 
   function setCargando(on) {
