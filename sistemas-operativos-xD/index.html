@@ -174,8 +174,8 @@
           </div>
         </div>
         <div class="row" style="margin-top:14px">
-          <button onclick="simular()">&#9654; Ejecutar simulación</button>
-          <button class="secondary" onclick="simularPasoApaso()">Paso a paso</button>
+          <button id="btnSimular" onclick="simular()">&#9654; Ejecutar simulación</button>
+          <button id="btnPasoApaso" class="secondary" onclick="simularPasoApaso()">Paso a paso</button>
           <span id="loading" class="hint"><span class="spinner"></span>Simulando...</span>
         </div>
         <p class="hint">La simulación usa los procesos guardados en la base de datos.</p>
@@ -332,8 +332,9 @@
   }
 
   function setCargando(on) {
-    $('loading').style.display = on ? 'inline' : 'none';
-    $('btnSimular').disabled = on;
+    var loading = $('loading'); if (loading) loading.style.display = on ? 'inline' : 'none';
+    var btnSim = $('btnSimular'); if (btnSim) btnSim.disabled = on;
+    var btnPaso = $('btnPasoApaso'); if (btnPaso) btnPaso.disabled = on;
   }
 
   function simular() {
@@ -348,9 +349,9 @@
         renderMetricas(r);
         renderEstados(null, r.estados, 'Terminado');
         toast('Simulación ' + r.algoritmo + ' completada');
+        setCargando(false);
       })
-      .catch(function (e) { toast(e.message, 'err'); });
-    setCargando(false);
+      .catch(function (e) { toast(e.message, 'err'); setCargando(false); });
   }
 
   function maxTiempo(gantt) { return gantt.reduce(function (m, g) { return Math.max(m, g.fin); }, 0); }
